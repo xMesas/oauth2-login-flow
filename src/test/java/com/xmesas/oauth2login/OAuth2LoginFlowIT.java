@@ -80,9 +80,12 @@ class OAuth2LoginFlowIT {
         HttpResponse<String> loginPage = getBody(authorizeUrl);
         assertThat(loginPage.statusCode()).isEqualTo(200);
         String formAction = extractFormAction(loginPage.body());
+        System.out.println("DEBUG formAction=" + formAction);
 
         // Step 3: submit real credentials to that real form action URL
-        HttpResponse<Void> loginSubmit = postForm(formAction, "username=demo-user&password=demo-pw");
+        HttpResponse<String> loginSubmit = postFormDebug(formAction, "username=demo-user&password=demo-pw");
+        System.out.println("DEBUG loginSubmit.status=" + loginSubmit.statusCode());
+        System.out.println("DEBUG loginSubmit.body=" + loginSubmit.body());
         assertThat(loginSubmit.statusCode()).isEqualTo(302);
         String callbackUrl = location(loginSubmit);
         assertThat(callbackUrl).contains("code=");
@@ -134,6 +137,14 @@ class OAuth2LoginFlowIT {
                         .POST(HttpRequest.BodyPublishers.ofString(formBody))
                         .build(),
                 HttpResponse.BodyHandlers.discarding());
+    }
+
+    private HttpResponse<String> postFormDebug(String url, String formBody) throws Exception {
+        return httpClient.send(HttpRequest.newBuilder(URI.create(url))
+                        .header("Content-Type", "application/x-www-form-urlencoded")
+                        .POST(HttpRequest.BodyPublishers.ofString(formBody))
+                        .build(),
+                HttpResponse.BodyHandlers.ofString());
     }
 
     private String location(HttpResponse<?> response) {
