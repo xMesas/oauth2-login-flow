@@ -33,7 +33,7 @@ The full flow, run against a real Keycloak (`docker compose up`), captured reque
 6. GET  /api/me             -> {"username":"demo-user","email":"demo-user@example.com",...}
 ```
 
-Every one of those is a real HTTP exchange against a real running Keycloak - not a mocked identity provider.
+Every one of those is a real HTTP exchange against a real running Keycloak - not a mocked identity provider. The same flow, automated (`OAuth2LoginFlowIT`, Testcontainers), passed for real in CI: `Tests run: 2, Failures: 0` - genuinely confirmed by grepping the run's log, not just trusting the checkmark (see the CI-integrity gotcha in `oidc-resource-server`'s README for why that check matters).
 
 ## Approach
 
@@ -48,7 +48,12 @@ Every one of those is a real HTTP exchange against a real running Keycloak - not
 
 **Redirects are followed manually, one at a time, instead of letting the HTTP client auto-follow them.** `HttpClient.Redirect.NEVER` plus reading the `Location` header explicitly at each step is what makes it possible to intercept step 2 (Keycloak's login page) and extract its real, dynamically-generated form action URL before continuing - an auto-following client would skip straight past the form to whatever the *next* redirect happened to be, with no chance to submit credentials in between.
 
-**A `CookieManager` with `CookiePolicy.ACCEPT_ALL`, not a manually-threaded cookie header.** The flow genuinely needs two different cookie jars in spirit - the app's own session cookie (`JSESSIONID`) and Keycloak's own session cookie (`KEYCLOAK_IDENTITY`) - and a `CookieManager` handles per-host cookie scoping automatically and correctly, exactly like a real browser would, rather than requiring this test to manually track and re-attach the right cookie to the right request.
+**A second and third real bug, both found only once CI actually ran the automated test against a real Testcontainers Keycloak** (this local Windows sandbox can't run Testcontainers at all - see the note below - so `OAuth2LoginFlowIT` was never exercised locally before its first push):
+
+1. **The test initially used `RANDOM_PORT`, but the Keycloak realm's registered redirect URI is a static `http://localhost:8080/login/oauth2/code/*`.** A redirect URI is part of a client's registered security configuration, not something negotiated per-request - a random app port made Spring Security construct a `redirect_uri` Keycloak had never seen, and Keycloak correctly rejected the authorization request with `400`. Manual validation never hit this, because it always ran the packaged jar on its real, fixed port 8080. Fixed by switching to `webEnvironment = DEFINED_PORT`.
+2. **`java.net.CookieManager` refused to resend Keycloak's own session cookie.** After fixing the port, the flow failed one step later with another `400` and a genuinely helpful Keycloak error page: *"Cookie not found. Please make sure cookies are enabled in your browser."* Keycloak marks its session cookie `Secure` even inside this local, plaintext-HTTP dev realm - and `CookieManager`, correctly per RFC 6265, refuses to send a `Secure` cookie back over a plain `http://` connection. Real browsers (and `curl`, which is how this flow was first validated manually) are more lenient specifically for `localhost`; the JDK's own cookie manager is not. The fix is a small hand-rolled cookie jar (`captureCookies`/`cookieHeader` in the test) that tracks and resends every cookie regardless of its `Secure` flag - correct here specifically because this is a controlled test against a known-safe local Keycloak, not a general-purpose recommendation to ignore the `Secure` flag.
+
+Both were only discoverable by watching the real CI run fail with a real, specific error and reading the real response body - not by inspecting the test code, which looked entirely reasonable on its own.
 
 ## Stack
 
@@ -81,8 +86,8 @@ Real Keycloak via Testcontainers, no manual setup - note the explicit `-Dtest=` 
 
 ## Status
 
-- [x] Working end to end — the full Authorization Code flow reproduced manually against a real Keycloak, request by request, including finding and fixing a real 500 error
-- [x] A real bug (`@AuthenticationPrincipal` missing) found by actually running the flow, documented with its real root cause
+- [x] Working end to end — the full Authorization Code flow reproduced manually against a real Keycloak, request by request, AND genuinely verified passing in CI (`Tests run: 2, Failures: 0`, grepped from the real log)
+- [x] Three real bugs (`@AuthenticationPrincipal` missing, `RANDOM_PORT` vs a statically-registered redirect URI, `CookieManager` refusing a `Secure` cookie over plain HTTP) found by actually running the flow, each documented with its real root cause
 - [x] README complete
 - [ ] Demo/screenshot added
 - [x] Pushed to GitHub
