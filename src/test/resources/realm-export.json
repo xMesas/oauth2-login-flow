@@ -1,0 +1,41 @@
+{
+  "realm": "demo",
+  "enabled": true,
+  "sslRequired": "none",
+  "registrationAllowed": false,
+  "roles": {
+    "realm": [
+      { "name": "user", "description": "Regular authenticated user" }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "login-client",
+      "enabled": true,
+      "publicClient": false,
+      "secret": "login-client-secret",
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": [
+        "http://localhost:8080/login/oauth2/code/*"
+      ],
+      "webOrigins": ["http://localhost:8080"]
+    }
+  ],
+  "users": [
+    {
+      "username": "demo-user",
+      "enabled": true,
+      "email": "demo-user@example.com",
+      "emailVerified": true,
+      "firstName": "Demo",
+      "lastName": "User",
+      "requiredActions": [],
+      "credentials": [
+        { "type": "password", "value": "demo-pw", "temporary": false }
+      ],
+      "realmRoles": ["user"]
+    }
+  ]
+}

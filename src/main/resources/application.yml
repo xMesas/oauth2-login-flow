@@ -1,0 +1,19 @@
+spring:
+  application:
+    name: oauth2-login-flow
+
+  security:
+    oauth2:
+      client:
+        registration:
+          keycloak:
+            client-id: login-client
+            client-secret: login-client-secret
+            authorization-grant-type: authorization_code
+            scope: openid, profile, email
+        provider:
+          keycloak:
+            issuer-uri: ${OIDC_ISSUER_URI:http://localhost:8081/realms/demo}
+
+server:
+  port: 8080
