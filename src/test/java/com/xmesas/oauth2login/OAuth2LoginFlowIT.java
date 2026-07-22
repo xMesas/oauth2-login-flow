@@ -2,7 +2,6 @@ package com.xmesas.oauth2login;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.GenericContainer;
@@ -31,7 +30,16 @@ import static org.assertj.core.api.Assertions.assertThat;
  * dynamically-generated login form HTML, and following the real authorization code all the
  * way back to the app's protected dashboard.
  */
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+// A FIXED port (matching application.yml's server.port: 8080), not RANDOM_PORT: the
+// Keycloak realm's registered redirect URI is statically "http://localhost:8080/login/
+// oauth2/code/*" (redirect URIs are part of the client's security configuration, not
+// something dynamically discovered at request time) - a random port here would make
+// Spring Security construct a redirect_uri that doesn't match what's registered, and
+// Keycloak correctly rejects the authorization request with 400. Found by CI actually
+// running this test for the first time (Testcontainers can't run in this project's local
+// Windows sandbox - see the README) - manual validation against the packaged jar always
+// used the app's real, fixed port 8080, so it never hit this mismatch.
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.DEFINED_PORT)
 @Testcontainers
 class OAuth2LoginFlowIT {
 
@@ -53,9 +61,6 @@ class OAuth2LoginFlowIT {
                 () -> "http://%s:%d/realms/demo".formatted(keycloak.getHost(), keycloak.getMappedPort(8080)));
     }
 
-    @LocalServerPort
-    private int appPort;
-
     private final HttpClient httpClient = HttpClient.newBuilder()
             .cookieHandler(new CookieManager(null, CookiePolicy.ACCEPT_ALL))
             .followRedirects(HttpClient.Redirect.NEVER)
@@ -63,7 +68,7 @@ class OAuth2LoginFlowIT {
 
     @Test
     void fullAuthorizationCodeLoginFlowReachesTheProtectedDashboard() throws Exception {
-        String appBase = "http://localhost:" + appPort;
+        String appBase = "http://localhost:8080";
 
         // Step 1: app initiates login -> redirects to Keycloak's real authorization endpoint
         HttpResponse<Void> step1 = get(appBase + "/oauth2/authorization/keycloak");
@@ -106,7 +111,7 @@ class OAuth2LoginFlowIT {
                 .build();
 
         HttpResponse<Void> response = freshClient.send(
-                HttpRequest.newBuilder(URI.create("http://localhost:" + appPort + "/dashboard")).GET().build(),
+                HttpRequest.newBuilder(URI.create("http://localhost:8080/dashboard")).GET().build(),
                 HttpResponse.BodyHandlers.discarding());
 
         assertThat(response.statusCode()).isEqualTo(302);
